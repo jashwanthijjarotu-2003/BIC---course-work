@@ -14,9 +14,52 @@ Algorithm 39 (as used here):
  25-26   move each particle: x <- x + epsilon * v
  27 until Best ideal or out of time        28 return Best
 
-Fitness is MAXIMISED (higher = better), matching Algorithm 39.
+Fitness is MINIMISED (lower = better): the fitness function returns a training
+loss, so smaller is better. (Algorithm 39 is written for maximisation; we keep
+the same structure but compare with '<'.)
 """
 import numpy as np
+
+
+class Particle:
+    """One particle: its own position, velocity, personal best, and informants."""
+    def __init__(self, position, velocity):
+        self.position = position
+        self.velocity = velocity
+        self.best_position = position.copy()    # personal best location
+        self.best_fitness = np.inf              # personal best score (minimise -> start high)
+        self.fitness = np.inf                   # current score
+        self.informants = []                    # list of other Particle objects (+ self)
+
+    def evaluate(self, fitness_fn):
+        """Score this particle's current position."""
+        self.fitness = fitness_fn(self.position)
+        return self.fitness
+
+    def update_personal_best(self):
+        """Keep this position if it is the best (lowest) this particle has seen."""
+        if self.fitness < self.best_fitness:    # '<' because we MINIMISE
+            self.best_fitness = self.fitness
+            self.best_position = self.position.copy()
+
+    def get_informants_best(self):              # Alg39 L18: x+ (informants' best, incl. self)
+        """The best personal-best position among this particle's informants."""
+        best = min(self.informants, key=lambda p: p.best_fitness)
+        return best.best_position
+
+    def update_velocity(self, informants_best, global_best,
+                        alpha, beta, gamma, delta, rng):   # Alg39 L16-24
+        D = len(self.position)
+        b = rng.uniform(0, beta, D)             # Alg39 L21
+        c = rng.uniform(0, gamma, D)            # Alg39 L22
+        d = rng.uniform(0, delta, D)            # Alg39 L23
+        self.velocity = (alpha * self.velocity                          # Alg39 L24
+                         + b * (self.best_position - self.position)     #   x* own best   (L17)
+                         + c * (informants_best    - self.position)     #   x+ informants (L18)
+                         + d * (global_best        - self.position))    #   x! global     (L19)
+
+    def update_position(self, epsilon):         # Alg39 L25-26
+        self.position = self.position + epsilon * self.velocity
 
 
 class PSO:
@@ -37,85 +80,89 @@ class PSO:
         self.resample_informants = resample_informants
         self.rng = np.random.default_rng(seed)
 
-    # ---- informant topology -------------------------------------------------
-    def _make_informants(self):
-        """Each particle is informed by itself + n_informants random others."""
+    # ---- setup --------------------------------------------------------------
+    def _make_particles(self):
+        """Alg39 L7-9: create random particles with random initial velocities."""
+        span = self.hi - self.lo
+        particles = []
+        for _ in range(self.swarm_size):                        # Alg39 L8
+            pos = self.rng.uniform(self.lo, self.hi, self.dim)  # Alg39 L9 (random location)
+            vel = self.rng.uniform(-0.1 * span, 0.1 * span, self.dim)
+            particles.append(Particle(pos, vel))
+        return particles
+
+    def _assign_informants(self, particles):
+        """Each particle is informed by n_informants random others + itself."""
         S = self.swarm_size
         k = min(self.n_informants, S - 1)
-        inf = []
-        for i in range(S):
-            others = [j for j in range(S) if j != i]
-            chosen = self.rng.choice(others, size=k, replace=False)
-            inf.append(np.append(chosen, i))
-        return inf
+        for i, p in enumerate(particles):
+            others = [particles[j] for j in range(S) if j != i]
+            chosen = self.rng.choice(len(others), size=k, replace=False)
+            p.informants = [others[j] for j in chosen] + [p]    # include self
 
-    def _handle_boundary(self, X, V):
+    def _handle_boundary(self, p):              # extension (not in Alg 39)
         if self.boundary == "none":
-            return X, V
+            return
         if self.boundary == "clip":             # stick to wall, kill velocity there
-            out = (X < self.lo) | (X > self.hi)
-            X = np.clip(X, self.lo, self.hi)
-            V = np.where(out, 0.0, V)
+            out = (p.position < self.lo) | (p.position > self.hi)
+            p.position = np.clip(p.position, self.lo, self.hi)
+            p.velocity = np.where(out, 0.0, p.velocity)
         elif self.boundary == "reflect":        # bounce back, reverse velocity
-            span = self.hi - self.lo
             for _ in range(2):  # handles overshoot up to ~1 span
-                over, under = X > self.hi, X < self.lo
-                X = np.where(over, 2 * self.hi - X, X)
-                X = np.where(under, 2 * self.lo - X, X)
-                V = np.where(over | under, -V, V)
-            X = np.clip(X, self.lo, self.hi)
+                over, under = p.position > self.hi, p.position < self.lo
+                p.position = np.where(over, 2 * self.hi - p.position, p.position)
+                p.position = np.where(under, 2 * self.lo - p.position, p.position)
+                p.velocity = np.where(over | under, -p.velocity, p.velocity)
+            p.position = np.clip(p.position, self.lo, self.hi)
         else:
             raise ValueError(f"Unknown boundary handling: {self.boundary}")
-        return X, V
 
+    # ---- main loop ----------------------------------------------------------
     def run(self):
-        S, D = self.swarm_size, self.dim
-        span = self.hi - self.lo
-
-        # Alg39 L7-9: random particles with random initial velocities
-        X = self.rng.uniform(self.lo, self.hi, (S, D))
-        V = self.rng.uniform(-0.1 * span, 0.1 * span, (S, D))
-
-        pbest_X = X.copy()                      # "previous fittest location" of each particle
-        pbest_f = np.full(S, -np.inf)
-        best_x, best_f = None, -np.inf          # Alg39 L10: Best <- none
-        informants = self._make_informants()
-        history = []                            # best fitness after each iteration
-        evals = 0
+        particles = self._make_particles()      # Alg39 L7-9
+        self._assign_informants(particles)
+        best_x, best_f = None, np.inf           # Alg39 L10: Best <- none (minimise -> +inf)
+        history, evals = [], 0
 
         for _ in range(self.iterations):        # Alg39 L11 (repeat ... until time out L27)
-            # Alg39 L12-15: assess fitness, track Best (and each particle's own best)
-            for i in range(S):
-                f = self.fitness_fn(X[i])
+            # Alg39 L12-15: assess each particle; update personal best and global Best
+            for p in particles:
+                p.evaluate(self.fitness_fn)
                 evals += 1
-                if f > pbest_f[i]:
-                    pbest_f[i], pbest_X[i] = f, X[i].copy()
-                if f > best_f:
-                    best_f, best_x = f, X[i].copy()
+                p.update_personal_best()
+                if p.best_fitness < best_f:     # minimise -> keep the smaller loss
+                    best_f, best_x = p.best_fitness, p.best_position.copy()
             history.append(best_f)
 
             if self.resample_informants:
-                informants = self._make_informants()
+                self._assign_informants(particles)
 
             # Alg39 L16-24: velocity update
-            g_idx = int(np.argmax(pbest_f))
-            x_global = pbest_X[g_idx]           # Alg39 L19: x! (best of any particle)
-            newV = np.empty_like(V)
-            for i in range(S):
-                x_star = pbest_X[i]             # Alg39 L17: x* own best
-                inf = informants[i]
-                x_plus = pbest_X[inf[np.argmax(pbest_f[inf])]]  # Alg39 L18: x+
-                b = self.rng.uniform(0, self.beta, D)    # Alg39 L21
-                c = self.rng.uniform(0, self.gamma, D)   # Alg39 L22
-                d = self.rng.uniform(0, self.delta, D)   # Alg39 L23
-                newV[i] = (self.alpha * V[i]             # Alg39 L24
-                           + b * (x_star - X[i])
-                           + c * (x_plus - X[i])
-                           + d * (x_global - X[i]))
-            V = newV
+            for p in particles:
+                informants_best = p.get_informants_best()               # Alg39 L18: x+
+                p.update_velocity(informants_best, best_x,              # L17 x*, L19 x!
+                                  self.alpha, self.beta, self.gamma, self.delta, self.rng)
 
             # Alg39 L25-26: move particles
-            X = X + self.epsilon * V
-            X, V = self._handle_boundary(X, V)  # extension (not in Alg 39)
+            for p in particles:
+                p.update_position(self.epsilon)
+                self._handle_boundary(p)        # extension (not in Alg 39)
 
         return best_x, best_f, history, evals   # Alg39 L28
+
+
+# ---------------------------------------------------------------------------
+# INDEPENDENCE DEMO: PSO knows nothing about ANNs. Run `python pso.py` to see it
+# minimise the sphere function f(x)=sum(x^2) (minimum 0 at the origin).
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    def sphere(v):
+        return float(np.sum(v ** 2))            # a loss: minimise -> go to 0
+
+    pso = PSO(dim=2, fitness_fn=sphere, swarm_size=30, iterations=100,
+              pos_range=(-5.0, 5.0), seed=0)
+    best_x, best_f, history, evals = pso.run()
+    print("Sphere benchmark (no ANN involved):")
+    print("  best position :", best_x)          # expect ~ [0, 0]
+    print("  best f value  :", best_f)           # expect ~ 0
+    print("  evaluations   :", evals)

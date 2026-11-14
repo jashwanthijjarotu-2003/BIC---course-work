@@ -21,21 +21,25 @@ from data import load_banknote, stratified_split, standardise
 DEFAULTS = dict(layers=[4, 4, 1], acts=["tanh", "logistic"], learn_acts=False,
                 swarm=20, iters=25, alpha=0.7, beta=1.5, gamma=1.5, delta=0.5,
                 epsilon=1.0, informants=3, resample=False, range=2.0,
-                boundary="clip", metric="accuracy")
+                boundary="clip", metric="mse")
 
 
 def accuracy(y_true, y_pred):
     return float(np.mean(y_true == y_pred))
 
 
-def make_fitness(ann, X, y, metric="accuracy"):
-    """Build the fitness function PSO maximises (the coupling point)."""
+def make_fitness(ann, X, y, metric="mse"):
+    """Build the fitness function PSO MINIMISES (the coupling point).
+    Returns a training LOSS, so smaller = better."""
     def fitness(vec):
         ann.set_params(vec)
-        if metric == "accuracy":
-            return accuracy(y, ann.predict(X))
-        if metric == "neg_mse":                 # smoother landscape than accuracy
-            return -float(np.mean((ann.forward(X)[:, 0] - y) ** 2))
+        if metric == "mse":                          # minimise squared error
+            return float(np.mean((ann.forward(X)[:, 0] - y) ** 2))
+        if metric == "bce":                          # minimise binary cross-entropy
+            p = np.clip(ann.forward(X)[:, 0], 1e-7, 1 - 1e-7)
+            return float(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p)))
+        if metric == "error":                        # minimise 1 - accuracy
+            return 1.0 - accuracy(y, ann.predict(X))
         raise ValueError(metric)
     return fitness
 
@@ -82,7 +86,7 @@ def main():
     p.add_argument("--informants", type=int, default=DEFAULTS["informants"])
     p.add_argument("--resample", action="store_true", help="re-draw informants each iteration")
     p.add_argument("--boundary", default="clip", choices=["none", "clip", "reflect"])
-    p.add_argument("--metric", default="accuracy", choices=["accuracy", "neg_mse"])
+    p.add_argument("--metric", default="mse", choices=["mse", "bce", "error"])    
     p.add_argument("--runs", type=int, default=10)
     p.add_argument("--split_seed", type=int, default=0)
     p.add_argument("--out", default=None, help="CSV to append per-run results to")
