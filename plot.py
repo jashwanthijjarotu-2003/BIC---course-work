@@ -1,7 +1,7 @@
 """Make figures from sweep.py output.   python plot.py budget   (or: python plot.py all)
 
 Writes results/<exp>_bars.png (mean test/train accuracy, error bars = 1 sd over runs)
-and results/<exp>_convergence.png (mean best training fitness vs evaluations).
+and results/<exp>_convergence.png (mean best training LOSS vs evaluations; lower = better).
 """
 import csv
 import json
@@ -19,6 +19,7 @@ def plot(exp):
     names = [r["name"] for r in rows]
     x = np.arange(len(names))
 
+    # --- bars: test/train accuracy ---
     fig, ax = plt.subplots(figsize=(max(6, 0.7 * len(names) + 2), 4))
     for off, key, lab in ((-0.2, "train", "train"), (0.2, "test", "test")):
         ax.bar(x + off, [float(r[f"{key}_mean"]) for r in rows], 0.4,
@@ -29,6 +30,7 @@ def plot(exp):
     ax.set_ylim(max(0.0, lo - 0.1), 1.005); ax.legend()
     fig.tight_layout(); fig.savefig(f"results/{exp}_bars.png", dpi=150); plt.close(fig)
 
+    # --- convergence: best training LOSS vs evaluations (lower = better) ---
     fig, ax = plt.subplots(figsize=(7, 4))
     for r in rows:
         h = np.array(hist[r["name"]])                         # runs x iterations
@@ -37,8 +39,8 @@ def plot(exp):
         ev = (np.arange(h.shape[1]) + 1) * swarm
         m, s = h.mean(0), h.std(0, ddof=1)
         ax.plot(ev, m, label=r["name"]); ax.fill_between(ev, m - s, m + s, alpha=0.15)
-    ax.set_xlabel("fitness evaluations"); ax.set_ylabel("best training accuracy")
-    ax.set_title(f"{exp}: convergence"); ax.legend(fontsize=7, ncol=2)
+    ax.set_xlabel("fitness evaluations"); ax.set_ylabel("best training loss")
+    ax.set_title(f"{exp}: convergence (lower = better)"); ax.legend(fontsize=7, ncol=2)
     fig.tight_layout(); fig.savefig(f"results/{exp}_convergence.png", dpi=150); plt.close(fig)
     print("wrote", f"results/{exp}_bars.png", f"results/{exp}_convergence.png")
 
