@@ -43,6 +43,8 @@ EXPERIMENTS = {
                      "fixed-relu": H([4], "relu"), "fixed-logistic": H([4], "logistic")},
     # which training loss PSO minimises
     "loss": {m: dict(metric=m) for m in ("mse", "bce", "error")},
+    # informant selection strategy: random vs Euclidean nearest-neighbour
+    "inf_strategy": {s: dict(informant_strategy=s) for s in ("random", "nearest")},
 }
 
 _split = None

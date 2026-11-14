@@ -17,6 +17,8 @@ Algorithm 39 (as used here):
 Fitness is MINIMISED (lower = better): the fitness function returns a training
 loss, so smaller is better. (Algorithm 39 is written for maximisation; we keep
 the same structure but compare with '<'.)
+
+Informants are chosen through an interchangeable STRATEGY (random or nearest-neighbour).
 """
 import numpy as np
 
@@ -62,11 +64,43 @@ class Particle:
         self.position = self.position + epsilon * self.velocity
 
 
+# ---- informant selection (Strategy pattern) ---------------------------------
+class InformantSelection:
+    """Abstract strategy: choose a particle's informants (always includes self)."""
+    def select(self, particle, particles, k, rng):
+        raise NotImplementedError
+
+
+class RandomInformants(InformantSelection):
+    """k random OTHER particles, plus the particle itself."""
+    def select(self, particle, particles, k, rng):
+        others = [p for p in particles if p is not particle]
+        idx = rng.choice(len(others), size=k, replace=False)
+        return [others[i] for i in idx] + [particle]
+
+
+class NearestInformants(InformantSelection):
+    """the k CLOSEST other particles by Euclidean distance, plus the particle itself."""
+    def select(self, particle, particles, k, rng):
+        others = [p for p in particles if p is not particle]
+        dist = [np.sum((p.position - particle.position) ** 2) for p in others]  # squared Euclidean
+        order = np.argsort(dist)[:k]
+        return [others[i] for i in order] + [particle]
+
+
+def make_informant_strategy(name):
+    if name == "random":
+        return RandomInformants()
+    if name == "nearest":
+        return NearestInformants()
+    raise ValueError(f"Unknown informant strategy '{name}' (use 'random' or 'nearest')")
+
+
 class PSO:
     def __init__(self, dim, fitness_fn, swarm_size=30, iterations=100,
                  alpha=0.7, beta=1.5, gamma=1.5, delta=0.5, epsilon=1.0,
                  n_informants=3, pos_range=(-1.0, 1.0), boundary="clip",
-                 resample_informants=False, seed=None):
+                 resample_informants=False, informant_strategy="random", seed=None):
         self.dim = dim
         self.fitness_fn = fitness_fn
         self.swarm_size = swarm_size            # Alg39 L1
@@ -78,6 +112,8 @@ class PSO:
         self.lo, self.hi = pos_range
         self.boundary = boundary                # "none" | "clip" | "reflect"
         self.resample_informants = resample_informants
+        self.informant_strategy = informant_strategy          # "random" | "nearest"
+        self.strategy = make_informant_strategy(informant_strategy)
         self.rng = np.random.default_rng(seed)
 
     # ---- setup --------------------------------------------------------------
@@ -92,13 +128,10 @@ class PSO:
         return particles
 
     def _assign_informants(self, particles):
-        """Each particle is informed by n_informants random others + itself."""
-        S = self.swarm_size
-        k = min(self.n_informants, S - 1)
-        for i, p in enumerate(particles):
-            others = [particles[j] for j in range(S) if j != i]
-            chosen = self.rng.choice(len(others), size=k, replace=False)
-            p.informants = [others[j] for j in chosen] + [p]    # include self
+        """Use the chosen strategy to give each particle its informants (+ itself)."""
+        k = min(self.n_informants, self.swarm_size - 1)
+        for p in particles:
+            p.informants = self.strategy.select(p, particles, k, self.rng)
 
     def _handle_boundary(self, p):              # extension (not in Alg 39)
         if self.boundary == "none":
@@ -134,7 +167,9 @@ class PSO:
                     best_f, best_x = p.best_fitness, p.best_position.copy()
             history.append(best_f)
 
-            if self.resample_informants:
+            # nearest-neighbour informants depend on current positions, so reassign each
+            # iteration; random informants only reassign if resample is on.
+            if self.resample_informants or self.informant_strategy == "nearest":
                 self._assign_informants(particles)
 
             # Alg39 L16-24: velocity update

@@ -20,7 +20,7 @@ from data import load_banknote, stratified_split, standardise
 DEFAULTS = dict(layers=[4, 4, 1], acts=["tanh", "logistic"], learn_acts=False,
                 swarm=20, iters=25, alpha=0.7, beta=1.5, gamma=1.5, delta=0.5,
                 epsilon=1.0, informants=3, resample=False, range=2.0,
-                boundary="clip", metric="mse")
+                boundary="clip", metric="mse", informant_strategy="random")
 
 
 def prepare_split(path, split_seed=0):
@@ -48,7 +48,8 @@ def one_run(cfg, seed, split):
               alpha=cfg["alpha"], beta=cfg["beta"], gamma=cfg["gamma"],
               delta=cfg["delta"], epsilon=cfg["epsilon"],
               n_informants=cfg["informants"], pos_range=(-cfg["range"], cfg["range"]),
-              boundary=cfg["boundary"], resample_informants=cfg["resample"], seed=seed)
+              boundary=cfg["boundary"], resample_informants=cfg["resample"],
+              informant_strategy=cfg["informant_strategy"], seed=seed)
     best_x, best_loss, history, evals = pso.run()
 
     # install the best weights, then measure full metrics on train and unseen test
@@ -75,6 +76,7 @@ def main():
     p.add_argument("--informants", type=int, default=DEFAULTS["informants"])
     p.add_argument("--resample", action="store_true")
     p.add_argument("--boundary", default="clip", choices=["none", "clip", "reflect"])
+    p.add_argument("--informant_strategy", default="random", choices=["random", "nearest"])
     p.add_argument("--runs", type=int, default=10)
     p.add_argument("--split_seed", type=int, default=0)
     a = p.parse_args()
