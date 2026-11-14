@@ -3,9 +3,6 @@
 Follows Algorithm 39 (Section 3.5, "Essentials of Metaheuristics", Luke).
 Comments tag the corresponding algorithm line numbers as "Alg39 L<n>".
 
-!! Before submitting, check the line numbers below against the lecture slides / book
-!! copy you have; I wrote them from memory of the algorithm's structure.
-
 Algorithm 39 (as used here):
  1 swarmsize   2 alpha (velocity retained)   3 beta (personal best)
  4 gamma (informants' best)   5 delta (global best)   6 epsilon (jump size)
