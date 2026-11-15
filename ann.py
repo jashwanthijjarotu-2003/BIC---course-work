@@ -4,7 +4,7 @@ No training algorithm lives here. The ANN exposes its weights and biases as ONE 
 vector (get_params / set_params) so that PSO can optimise them (see run.py for coupling).
 
 Each layer uses an ACTIVATION-FUNCTION OBJECT (an ActivationFunction subclass with a
-forward() method), as required by the design.
+forward() method)..
 """
 import numpy as np
 

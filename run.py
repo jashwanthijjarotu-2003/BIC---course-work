@@ -17,7 +17,7 @@ from adapter import MLPFitnessAdapter
 from metrics import binary_metrics
 from data import load_banknote, stratified_split, standardise
 
-DEFAULTS = dict(layers=[4, 4, 1], acts=["tanh", "logistic"], learn_acts=False,
+DEFAULTS = dict(layers=[4, 4, 1], acts=["relu", "logistic"], learn_acts=False,
                 swarm=20, iters=25, alpha=0.7, beta=1.5, gamma=1.5, delta=0.5,
                 epsilon=1.0, informants=3, resample=False, range=2.0,
                 boundary="clip", metric="mse", informant_strategy="random")
