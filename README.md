@@ -35,11 +35,11 @@ and put it in the same folder as the `.py` files. To use another location, pass 
 | `sweep.py` | Runs a named experiment (a grid of configurations × N runs) and saves results to `results/` |
 | `plot.py` | Makes bar charts and convergence plots from the saved results |
 | `compare.py` | Welch's t-test between two configurations of one experiment |
-| `BIC_coursework_full.ipynb` | Colab notebook that writes all the files above and runs every experiment in order |
+| `BIC_coursework-2.ipynb` | Colab notebook that writes all the files above and runs every experiment in order |
 
 ## How to run
 
-**Option A: Google Colab (easiest).** Open `BIC_coursework_full.ipynb`, upload the data
+**Option A: Google Colab (easiest).** Open `BIC_coursework-2.ipynb`, upload the data
 file when asked, and run all cells from top to bottom.
 
 **Option B: command line.** Run these from the folder that holds the `.py` files.
