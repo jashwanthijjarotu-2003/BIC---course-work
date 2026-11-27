@@ -36,6 +36,7 @@ and put it in the same folder as the `.py` files. To use another location, pass 
 | `plot.py` | Makes bar charts and convergence plots from the saved results |
 | `compare.py` | Welch's t-test between two configurations of one experiment |
 | `BIC_coursework-2.ipynb` | Colab notebook that writes all the files above and runs every experiment in order |
+| report_figures.py | Redraws the report's Figures 1–3 from the notebook outputs |
 
 ## How to run
 
